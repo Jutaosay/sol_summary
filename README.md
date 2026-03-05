@@ -92,15 +92,19 @@ Base URL: `http://<host>:8787`
   - 返回包含 `holder_count_is_estimate=true`
 - `GET /metrics?ca=<CA>&limit=120`
   - 默认仅成功样本（`sample_ok=1`）
+  - 返回 `degraded/status`；当窗口内全失败且默认过滤后为空，会返回 `hint`
 - `GET /metrics?ca=<CA>&limit=120&include_failed=true`
   - 包含失败样本
+- `GET /latest?ca=<CA>`
+  - 额外返回 `latest_sample_ok/degraded/hint`
 - `limit` 不在 `[1,2000]` 时返回 HTTP 400
 
 ---
 
 ## 5) 环境变量
 
-- `SOL_RPC_URL`：单 RPC 地址
+- `SOL_RPC_URL`：主 RPC 地址
+- `SOL_RPC_URLS`：备用 RPC 列表（逗号分隔，主RPC失败时自动回退）
 - `SOL_SUMMARY_DB`：数据库路径（默认 `data/sol_summary.db`）
 - `SOL_SUMMARY_REFRESH_SECONDS`：采样间隔，默认 5
 - `SOL_SUMMARY_REQUEST_TIMEOUT`：请求超时，默认 15

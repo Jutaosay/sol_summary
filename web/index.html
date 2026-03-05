@@ -6,27 +6,75 @@
   <title>sol_summary</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: sans-serif; margin: 20px; }
-    .row { margin-bottom: 10px; }
-    input { width: 560px; }
+    body { font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; background:#f8fafc; color:#0f172a; }
+    .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:12px; }
+    .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
+    input, select { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; }
+    input#ca { min-width: 520px; }
+    button { padding:8px 12px; border:none; border-radius:8px; cursor:pointer; }
+    #start { background:#16a34a; color:#fff; }
+    #stop { background:#ef4444; color:#fff; }
+    #refreshNow { background:#2563eb; color:#fff; }
+    #copyCa { background:#334155; color:#fff; }
+    .muted { color: #64748b; font-size:13px; }
+    .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
+    .ok { background:#dcfce7; color:#166534; }
+    .warn { background:#fef3c7; color:#92400e; }
+    .err { background:#fee2e2; color:#991b1b; }
+    .kpis { display:grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap:10px; }
+    .kpi { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; }
+    .kpi .v { font-weight:700; font-size:18px; }
     canvas { max-width: 1200px; height: 420px; }
-    .muted { color: #666; }
   </style>
 </head>
 <body>
   <h2>sol_summary 实时监控</h2>
-  <div class="row">
-    <input id="ca" placeholder="输入 CA" value="E9SmMCvtLfitMwkLzkduwgN8ZYcfepiELLQ8d1SApump" />
-    <button id="start">开始追踪</button>
-    <button id="stop">停止追踪</button>
+
+  <div class="card">
+    <div class="row">
+      <input id="ca" placeholder="输入 CA" value="E9SmMCvtLfitMwkLzkduwgN8ZYcfepiELLQ8d1SApump" />
+      <button id="copyCa">复制CA</button>
+      <button id="start">开始追踪</button>
+      <button id="stop">停止追踪</button>
+      <button id="refreshNow">立即刷新</button>
+      <label class="muted">刷新间隔</label>
+      <select id="intervalSel">
+        <option value="3">3s</option>
+        <option value="5" selected>5s</option>
+        <option value="10">10s</option>
+      </select>
+      <label class="muted"><input type="checkbox" id="includeFailed" /> 展示失败样本</label>
+    </div>
+    <div class="row">
+      <span id="healthBadge" class="badge ok">状态：待命</span>
+      <span class="muted" id="status">尚未开始追踪</span>
+    </div>
   </div>
-  <div class="row muted" id="status">状态：未开始</div>
-  <canvas id="chart"></canvas>
+
+  <div class="card kpis">
+    <div class="kpi"><div class="muted">点位数</div><div id="kpiPoints" class="v">0</div></div>
+    <div class="kpi"><div class="muted">最新 holder_count</div><div id="kpiHolder" class="v">-</div></div>
+    <div class="kpi"><div class="muted">最新 trimmed_avg</div><div id="kpiTrimmed" class="v">-</div></div>
+    <div class="kpi"><div class="muted">最新 top50_total_raw</div><div id="kpiRaw" class="v">-</div></div>
+  </div>
+
+  <div class="card">
+    <canvas id="chart"></canvas>
+  </div>
 
   <script>
     const caInput = document.getElementById('ca');
     const statusEl = document.getElementById('status');
+    const healthBadge = document.getElementById('healthBadge');
+    const intervalSel = document.getElementById('intervalSel');
+    const includeFailedEl = document.getElementById('includeFailed');
     const ctx = document.getElementById('chart');
+    const kpiPoints = document.getElementById('kpiPoints');
+    const kpiHolder = document.getElementById('kpiHolder');
+    const kpiTrimmed = document.getElementById('kpiTrimmed');
+    const kpiRaw = document.getElementById('kpiRaw');
+
+    let timer = null;
 
     const chart = new Chart(ctx, {
       type: 'line',
@@ -45,6 +93,20 @@
       }
     });
 
+    function setBadge(kind, text) {
+      healthBadge.className = `badge ${kind}`;
+      healthBadge.textContent = text;
+    }
+
+    function fmt(n) {
+      if (n === null || n === undefined) return '-';
+      const x = Number(n);
+      if (!Number.isFinite(x)) return '-';
+      if (Math.abs(x) >= 1_000_000) return (x / 1_000_000).toFixed(2) + 'M';
+      if (Math.abs(x) >= 1_000) return (x / 1_000).toFixed(1) + 'K';
+      return x.toFixed(2);
+    }
+
     async function post(url, body) {
       const r = await fetch(url, {
         method: 'POST',
@@ -59,19 +121,43 @@
       const ca = caInput.value.trim();
       if (!ca) return;
       try {
-        const r = await fetch(`/metrics?ca=${encodeURIComponent(ca)}&limit=120`);
-        if (!r.ok) return;
+        const includeFailed = includeFailedEl.checked ? 'true' : 'false';
+        const r = await fetch(`/metrics?ca=${encodeURIComponent(ca)}&limit=120&include_failed=${includeFailed}`);
+        if (!r.ok) throw new Error(await r.text());
         const data = await r.json();
         const items = data.items || [];
+
         chart.data.labels = items.map(i => new Date(i.ts * 1000).toLocaleTimeString());
         chart.data.datasets[0].data = items.map(i => i.holder_count);
         chart.data.datasets[1].data = items.map(i => i.trimmed_avg);
         chart.data.datasets[2].data = items.map(i => i.top50_total_raw);
         chart.update();
-        statusEl.textContent = `状态：追踪中，点位 ${items.length}，最近更新时间 ${items.length ? new Date(items[items.length-1].ts * 1000).toLocaleTimeString() : '-'}`;
+
+        const last = items.length ? items[items.length - 1] : null;
+        kpiPoints.textContent = String(items.length);
+        kpiHolder.textContent = fmt(last?.holder_count);
+        kpiTrimmed.textContent = fmt(last?.trimmed_avg);
+        kpiRaw.textContent = fmt(last?.top50_total_raw);
+
+        if (data.degraded) {
+          setBadge('warn', '状态：降级中');
+        } else {
+          setBadge('ok', '状态：正常');
+        }
+
+        let extra = '';
+        if (data.degraded) extra += ' | degraded=true (rpc_limited)';
+        if (data.hint) extra += ` | hint: ${data.hint}`;
+        statusEl.textContent = `点位 ${items.length}，最近更新时间 ${last ? new Date(last.ts * 1000).toLocaleTimeString() : '-'}${extra}`;
       } catch (e) {
-        statusEl.textContent = `状态：刷新失败 ${e.message}`;
+        setBadge('err', '状态：刷新失败');
+        statusEl.textContent = `刷新失败：${e.message}`;
       }
+    }
+
+    function resetTimer() {
+      if (timer) clearInterval(timer);
+      timer = setInterval(refresh, Number(intervalSel.value) * 1000);
     }
 
     document.getElementById('start').addEventListener('click', async () => {
@@ -79,9 +165,11 @@
       if (!ca) return;
       try {
         await post('/track', { ca });
-        statusEl.textContent = '状态：已启动追踪';
+        setBadge('ok', '状态：追踪中');
+        statusEl.textContent = '已启动追踪';
       } catch (e) {
-        statusEl.textContent = `状态：启动失败 ${e.message}`;
+        setBadge('err', '状态：启动失败');
+        statusEl.textContent = `启动失败：${e.message}`;
       }
     });
 
@@ -90,13 +178,28 @@
       if (!ca) return;
       try {
         await post('/stop', { ca });
-        statusEl.textContent = '状态：已停止追踪';
+        setBadge('warn', '状态：已停止');
+        statusEl.textContent = '已停止追踪';
       } catch (e) {
-        statusEl.textContent = `状态：停止失败 ${e.message}`;
+        setBadge('err', '状态：停止失败');
+        statusEl.textContent = `停止失败：${e.message}`;
       }
     });
 
-    setInterval(refresh, 5000);
+    document.getElementById('refreshNow').addEventListener('click', refresh);
+    document.getElementById('copyCa').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(caInput.value.trim());
+        statusEl.textContent = 'CA 已复制到剪贴板';
+      } catch (e) {
+        statusEl.textContent = `复制失败：${e.message}`;
+      }
+    });
+
+    intervalSel.addEventListener('change', resetTimer);
+    includeFailedEl.addEventListener('change', refresh);
+
+    resetTimer();
     refresh();
   </script>
 </body>

@@ -7,7 +7,7 @@ from typing import Any
 
 import requests
 
-from .config import REQUEST_TIMEOUT, RPC_URL
+from .config import REQUEST_TIMEOUT, RPC_URL, RPC_URLS
 
 logger = logging.getLogger(__name__)
 
@@ -16,15 +16,18 @@ BACKOFF_BASE_SECONDS = 0.6
 BACKOFF_MAX_SECONDS = 8.0
 
 
-def _resolve_rpc_url(explicit_rpc_url: str | None = None) -> str:
+def _resolve_rpc_candidates(explicit_rpc_url: str | None = None) -> list[str]:
     if explicit_rpc_url:
-        return explicit_rpc_url
-    # Runtime override support.
-    return os.getenv("SOL_RPC_URL", RPC_URL)
+        return [explicit_rpc_url]
+    env_urls = [x.strip() for x in os.getenv("SOL_RPC_URLS", "").split(",") if x.strip()]
+    candidates = env_urls or RPC_URLS[:]
+    primary = os.getenv("SOL_RPC_URL", RPC_URL)
+    if primary and primary not in candidates:
+        candidates.insert(0, primary)
+    return candidates or [RPC_URL]
 
 
-def _rpc_call(method: str, params: list[Any], rpc_url: str | None = None) -> dict[str, Any]:
-    rpc = _resolve_rpc_url(rpc_url)
+def _rpc_call_once(method: str, params: list[Any], rpc: str) -> dict[str, Any]:
     payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     last_err: Exception | None = None
 
@@ -73,6 +76,19 @@ def _rpc_call(method: str, params: list[Any], rpc_url: str | None = None) -> dic
     raise RuntimeError(
         f"rpc failed method={method} rpc={rpc} attempts={MAX_RETRIES}: {last_err}"
     )
+
+
+def _rpc_call(method: str, params: list[Any], rpc_url: str | None = None) -> dict[str, Any]:
+    candidates = _resolve_rpc_candidates(rpc_url)
+    errors: list[str] = []
+    for rpc in candidates:
+        try:
+            return _rpc_call_once(method, params, rpc)
+        except Exception as e:
+            errors.append(str(e))
+            logger.warning("rpc candidate failed, switching next rpc=%s err=%s", rpc, e)
+            continue
+    raise RuntimeError(f"all rpc candidates failed for {method}: {' | '.join(errors[:3])}")
 
 
 def get_token_supply_and_decimals(ca: str, rpc_url: str | None = None) -> tuple[int, int]:

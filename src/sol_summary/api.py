@@ -61,7 +61,12 @@ def latest(ca: str):
     row = storage.get_latest(ca)
     if not row:
         raise HTTPException(404, "no data")
+    sample_ok = int(row.get("sample_ok", 0)) == 1
     row["holder_count_is_estimate"] = True
+    row["latest_sample_ok"] = sample_ok
+    row["degraded"] = not sample_ok
+    if not sample_ok:
+        row["hint"] = "latest sample failed; try include_failed=true or switch to private RPC/SOL_RPC_URLS"
     return row
 
 
@@ -73,10 +78,22 @@ def metrics(ca: str, limit: int = 120, include_failed: bool = False):
         raise HTTPException(400, str(e)) from e
     if not (1 <= limit <= 2000):
         raise HTTPException(400, "limit must be in [1, 2000]")
+
     items = storage.get_metrics(ca, limit=limit, include_failed=include_failed)
+    all_items = storage.get_metrics(ca, limit=limit, include_failed=True)
+
     for item in items:
         item["holder_count_is_estimate"] = True
-    return {
+
+    success_count = sum(1 for x in all_items if int(x.get("sample_ok", 0)) == 1)
+    degraded = len(all_items) > 0 and success_count == 0
+
+    resp = {
         "ca": ca,
         "items": items,
+        "degraded": degraded,
+        "status": "rpc_limited" if degraded else "ok",
     }
+    if not include_failed and len(items) == 0 and len(all_items) > 0:
+        resp["hint"] = "no successful samples in current window; retry with include_failed=true or configure private RPC/SOL_RPC_URLS"
+    return resp
