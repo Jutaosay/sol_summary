@@ -1,0 +1,80 @@
+{
+  "time": "2026-03-05T18:35:12",
+  "ca": "E9SmMCvtLfitMwkLzkduwgN8ZYcfepiELLQ8d1SApump",
+  "rounds": 5,
+  "success_rounds": 0,
+  "failed_rounds": 5,
+  "avg_elapsed_s": 10.02,
+  "rows": [
+    {
+      "round": 1,
+      "track": 200,
+      "latest": 200,
+      "metrics": 200,
+      "metrics_all": 200,
+      "stop": 200,
+      "ok_items": 0,
+      "all_items": 5,
+      "latest_sample_ok": 0,
+      "latest_holder_count": 0,
+      "last_err": "rpc failed method=getTokenLargestAccounts rpc=https://api.mainnet-beta.solana.com attempts=5: rpc rate limited (HTTP 429",
+      "elapsed_s": 10.05
+    },
+    {
+      "round": 2,
+      "track": 200,
+      "latest": 200,
+      "metrics": 200,
+      "metrics_all": 200,
+      "stop": 200,
+      "ok_items": 0,
+      "all_items": 5,
+      "latest_sample_ok": 0,
+      "latest_holder_count": 0,
+      "last_err": "rpc failed method=getTokenLargestAccounts rpc=https://api.mainnet-beta.solana.com attempts=5: rpc rate limited (HTTP 429",
+      "elapsed_s": 10.01
+    },
+    {
+      "round": 3,
+      "track": 200,
+      "latest": 200,
+      "metrics": 200,
+      "metrics_all": 200,
+      "stop": 200,
+      "ok_items": 0,
+      "all_items": 5,
+      "latest_sample_ok": 0,
+      "latest_holder_count": 0,
+      "last_err": "rpc failed method=getTokenLargestAccounts rpc=https://api.mainnet-beta.solana.com attempts=5: rpc rate limited (HTTP 429",
+      "elapsed_s": 10.01
+    },
+    {
+      "round": 4,
+      "track": 200,
+      "latest": 200,
+      "metrics": 200,
+      "metrics_all": 200,
+      "stop": 200,
+      "ok_items": 0,
+      "all_items": 5,
+      "latest_sample_ok": 0,
+      "latest_holder_count": 0,
+      "last_err": "rpc failed method=getTokenLargestAccounts rpc=https://api.mainnet-beta.solana.com attempts=5: rpc rate limited (HTTP 429",
+      "elapsed_s": 10.01
+    },
+    {
+      "round": 5,
+      "track": 200,
+      "latest": 200,
+      "metrics": 200,
+      "metrics_all": 200,
+      "stop": 200,
+      "ok_items": 0,
+      "all_items": 5,
+      "latest_sample_ok": 0,
+      "latest_holder_count": 0,
+      "last_err": "rpc failed method=getTokenLargestAccounts rpc=https://api.mainnet-beta.solana.com attempts=5: rpc rate limited (HTTP 429",
+      "elapsed_s": 10.02
+    }
+  ]
+}
