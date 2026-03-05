@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+data/
+__pycache__/
+.pytest_cache/
+*.pyc
+reports/playwright-html/
+reports/playwright-results.json
+reports/e2e-run.log
+reports/e2e-summary.md
+test-results/
+.env

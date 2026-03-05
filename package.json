@@ -1,0 +1,12 @@
+{
+  "name": "sol-summary-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:report": "bash scripts/run_playwright_e2e.sh"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.54.2"
+  }
+}
