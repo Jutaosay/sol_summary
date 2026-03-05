@@ -155,3 +155,38 @@ bash scripts/run_playwright_e2e.sh
 1. `holder_count` 目前是估算值（largest accounts 近似），不等于全量链上 holder。
 2. 公共 RPC 在高频采样下很容易 429。
 3. SQLite 适合单机轻量，后续可迁移 PostgreSQL + 时序存储。
+
+---
+
+## 9) 私有 RPC 接入与验证（推荐）
+
+建议生产默认使用私有 RPC（如 Helius/QuickNode），避免公共 RPC 的 429 限流。
+
+### 配置示例（Helius）
+
+```bash
+export HELIUS_API_KEY="<YOUR_KEY>"
+export SOL_RPC_URL="https://mainnet.helius-rpc.com/?api-key=${HELIUS_API_KEY}"
+# 可选：多RPC池
+export SOL_RPC_URLS="$SOL_RPC_URL"
+```
+
+### 最近实测结果（CA: `E9SmMCvtLfitMwkLzkduwgN8ZYcfepiELLQ8d1SApump`）
+
+- 5 轮测试：**5/5 成功**
+- `/latest`、`/metrics` 全部 200
+- `degraded=false`，`status=ok`
+
+结论：接入私有 RPC 后可用性显著提升。
+
+---
+
+## 10) UI/UX（round6+）
+
+前端已增强：
+- 状态 badge（正常/降级/错误）
+- KPI 卡片（点位数、holder_count、trimmed_avg、top50_total_raw）
+- 刷新间隔切换（3s/5s/10s）
+- include_failed 开关
+- 手动刷新、复制 CA、活动日志
+- 主题切换（明/暗）与快捷键（r/s/x）

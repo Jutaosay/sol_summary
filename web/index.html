@@ -6,25 +6,35 @@
   <title>sol_summary</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body { font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; background:#f8fafc; color:#0f172a; }
-    .card { background:#fff; border:1px solid #e2e8f0; border-radius:12px; padding:14px; margin-bottom:12px; }
+    :root {
+      --bg:#f8fafc; --fg:#0f172a; --muted:#64748b; --card:#fff; --border:#e2e8f0;
+      --ok-bg:#dcfce7; --ok-fg:#166534; --warn-bg:#fef3c7; --warn-fg:#92400e; --err-bg:#fee2e2; --err-fg:#991b1b;
+    }
+    body.dark {
+      --bg:#0b1220; --fg:#e2e8f0; --muted:#94a3b8; --card:#111827; --border:#1f2937;
+      --ok-bg:#052e16; --ok-fg:#86efac; --warn-bg:#422006; --warn-fg:#fcd34d; --err-bg:#450a0a; --err-fg:#fca5a5;
+    }
+    body { font-family: Inter, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; margin: 20px; background:var(--bg); color:var(--fg); }
+    .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px; margin-bottom:12px; }
     .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px; }
     input, select { padding:8px 10px; border:1px solid #cbd5e1; border-radius:8px; }
+    body.dark input, body.dark select { background:#0f172a; color:#e2e8f0; border-color:#334155; }
     input#ca { min-width: 520px; }
     button { padding:8px 12px; border:none; border-radius:8px; cursor:pointer; }
     #start { background:#16a34a; color:#fff; }
     #stop { background:#ef4444; color:#fff; }
     #refreshNow { background:#2563eb; color:#fff; }
-    #copyCa { background:#334155; color:#fff; }
-    .muted { color: #64748b; font-size:13px; }
+    #copyCa, #themeToggle { background:#334155; color:#fff; }
+    .muted { color: var(--muted); font-size:13px; }
     .badge { display:inline-block; padding:2px 8px; border-radius:999px; font-size:12px; }
-    .ok { background:#dcfce7; color:#166534; }
-    .warn { background:#fef3c7; color:#92400e; }
-    .err { background:#fee2e2; color:#991b1b; }
+    .ok { background:var(--ok-bg); color:var(--ok-fg); }
+    .warn { background:var(--warn-bg); color:var(--warn-fg); }
+    .err { background:var(--err-bg); color:var(--err-fg); }
     .kpis { display:grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap:10px; }
-    .kpi { background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:10px; }
+    .kpi { background:var(--bg); border:1px solid var(--border); border-radius:10px; padding:10px; }
     .kpi .v { font-weight:700; font-size:18px; }
     canvas { max-width: 1200px; height: 420px; }
+    #activity { max-height:140px; overflow:auto; font-size:12px; line-height:1.6; }
   </style>
 </head>
 <body>
@@ -37,6 +47,7 @@
       <button id="start">开始追踪</button>
       <button id="stop">停止追踪</button>
       <button id="refreshNow">立即刷新</button>
+      <button id="themeToggle">切换主题</button>
       <label class="muted">刷新间隔</label>
       <select id="intervalSel">
         <option value="3">3s</option>
@@ -62,6 +73,11 @@
     <canvas id="chart"></canvas>
   </div>
 
+  <div class="card">
+    <div class="muted">活动日志（最近 20 条）</div>
+    <div id="activity"></div>
+  </div>
+
   <script>
     const caInput = document.getElementById('ca');
     const statusEl = document.getElementById('status');
@@ -73,8 +89,22 @@
     const kpiHolder = document.getElementById('kpiHolder');
     const kpiTrimmed = document.getElementById('kpiTrimmed');
     const kpiRaw = document.getElementById('kpiRaw');
+    const activityEl = document.getElementById('activity');
 
     let timer = null;
+    const activity = [];
+
+    function addLog(msg) {
+      const ts = new Date().toLocaleTimeString();
+      activity.unshift(`[${ts}] ${msg}`);
+      if (activity.length > 20) activity.pop();
+      activityEl.innerHTML = activity.map(x => `<div>${x}</div>`).join('');
+    }
+
+    function initTheme() {
+      const t = localStorage.getItem('solsum_theme') || 'light';
+      document.body.classList.toggle('dark', t === 'dark');
+    }
 
     const chart = new Chart(ctx, {
       type: 'line',
@@ -86,11 +116,7 @@
           { label: 'top50_total_raw', data: [], borderColor: '#ea580c', tension: 0.2 },
         ]
       },
-      options: {
-        responsive: true,
-        animation: false,
-        scales: { x: { ticks: { maxTicksLimit: 12 } } }
-      }
+      options: { responsive: true, animation: false, scales: { x: { ticks: { maxTicksLimit: 12 } } } }
     });
 
     function setBadge(kind, text) {
@@ -109,9 +135,7 @@
 
     async function post(url, body) {
       const r = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body)
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       if (!r.ok) throw new Error(await r.text());
       return await r.json();
@@ -139,12 +163,7 @@
         kpiTrimmed.textContent = fmt(last?.trimmed_avg);
         kpiRaw.textContent = fmt(last?.top50_total_raw);
 
-        if (data.degraded) {
-          setBadge('warn', '状态：降级中');
-        } else {
-          setBadge('ok', '状态：正常');
-        }
-
+        if (data.degraded) setBadge('warn', '状态：降级中'); else setBadge('ok', '状态：正常');
         let extra = '';
         if (data.degraded) extra += ' | degraded=true (rpc_limited)';
         if (data.hint) extra += ` | hint: ${data.hint}`;
@@ -152,12 +171,14 @@
       } catch (e) {
         setBadge('err', '状态：刷新失败');
         statusEl.textContent = `刷新失败：${e.message}`;
+        addLog(`刷新失败: ${e.message}`);
       }
     }
 
     function resetTimer() {
       if (timer) clearInterval(timer);
       timer = setInterval(refresh, Number(intervalSel.value) * 1000);
+      addLog(`刷新间隔切换为 ${intervalSel.value}s`);
     }
 
     document.getElementById('start').addEventListener('click', async () => {
@@ -167,9 +188,11 @@
         await post('/track', { ca });
         setBadge('ok', '状态：追踪中');
         statusEl.textContent = '已启动追踪';
+        addLog('已启动追踪');
       } catch (e) {
         setBadge('err', '状态：启动失败');
         statusEl.textContent = `启动失败：${e.message}`;
+        addLog(`启动失败: ${e.message}`);
       }
     });
 
@@ -180,25 +203,50 @@
         await post('/stop', { ca });
         setBadge('warn', '状态：已停止');
         statusEl.textContent = '已停止追踪';
+        addLog('已停止追踪');
       } catch (e) {
         setBadge('err', '状态：停止失败');
         statusEl.textContent = `停止失败：${e.message}`;
+        addLog(`停止失败: ${e.message}`);
       }
     });
 
-    document.getElementById('refreshNow').addEventListener('click', refresh);
+    document.getElementById('refreshNow').addEventListener('click', async () => {
+      await refresh();
+      addLog('手动刷新一次');
+    });
+
     document.getElementById('copyCa').addEventListener('click', async () => {
       try {
         await navigator.clipboard.writeText(caInput.value.trim());
         statusEl.textContent = 'CA 已复制到剪贴板';
+        addLog('CA 已复制');
       } catch (e) {
         statusEl.textContent = `复制失败：${e.message}`;
       }
     });
 
-    intervalSel.addEventListener('change', resetTimer);
-    includeFailedEl.addEventListener('change', refresh);
+    document.getElementById('themeToggle').addEventListener('click', () => {
+      document.body.classList.toggle('dark');
+      localStorage.setItem('solsum_theme', document.body.classList.contains('dark') ? 'dark' : 'light');
+      addLog('主题已切换');
+    });
 
+    intervalSel.addEventListener('change', resetTimer);
+    includeFailedEl.addEventListener('change', () => {
+      addLog(`include_failed=${includeFailedEl.checked}`);
+      refresh();
+    });
+
+    // keyboard shortcut: r refresh, s start, x stop
+    document.addEventListener('keydown', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      if (e.key === 'r') document.getElementById('refreshNow').click();
+      if (e.key === 's') document.getElementById('start').click();
+      if (e.key === 'x') document.getElementById('stop').click();
+    });
+
+    initTheme();
     resetTimer();
     refresh();
   </script>
